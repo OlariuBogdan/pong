@@ -93,6 +93,12 @@ public:
         if(IsKeyDown(KEY_RIGHT)){
             speed++;
         }
+        if(IsKeyDown(KEY_A)){
+            height+=10;
+        }
+        if(IsKeyDown(KEY_S)){
+            height-=10;
+        }
         LimitMovment();
     }
 };
