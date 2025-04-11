@@ -2,6 +2,10 @@
 #include <raylib.h>
 
 using namespace std;
+Color Green = Color{38,185,154,255};
+Color Dark_Green = Color{20,160,133,255};
+Color Light_Green = Color{129,204,184,255};
+Color Yellow = Color{243,213,91,255};
 
 
 int player_score = 0;
@@ -15,7 +19,7 @@ public:
 
     void Draw()
     {
-        DrawCircle(x, y, radius, WHITE);
+        DrawCircle(x, y, radius, Yellow);
     }
     void Update()
     {
@@ -83,6 +87,12 @@ public:
         {
             y = y + speed;
         }
+        if(IsKeyDown(KEY_LEFT)){
+            speed--;
+        }
+        if(IsKeyDown(KEY_RIGHT)){
+            speed++;
+        }
         LimitMovment();
     }
 };
@@ -109,32 +119,49 @@ CpuPaddle cpu;
 
 int main()
 {
-    const int screen_width = 1280;
-    const int screen_height = 800;
-    InitWindow(screen_width, screen_height, "Retro  Pong!");
+    const int initial_width = 1280;
+    const int initial_height = 800;
+    
+    // Start in fullscreen mode
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+    InitWindow(initial_width, initial_height, "Retro Pong!");
+    ToggleFullscreen();
     SetTargetFPS(60);
 
-    // ball
+    // Initialize game objects with relative positions
     ball.radius = 20;
-    ball.x = screen_width / 2;
-    ball.y = screen_height / 2;
+    ball.x = GetScreenWidth() / 2;
+    ball.y = GetScreenHeight() / 2;
     ball.speed_x = 7;
     ball.speed_y = 7;
 
     player.width = 25;
     player.height = 120;
-    player.x = screen_width - player.width - 10;
-    player.y = screen_height / 2 - player.height / 2;
+    player.x = GetScreenWidth() - player.width - 10;
+    player.y = GetScreenHeight() / 2 - player.height / 2;
     player.speed = 6;
 
     cpu.height = 120;
     cpu.width = 25;
     cpu.x = 10;
-    cpu.y = screen_height / 2 - cpu.height / 2;
+    cpu.y = GetScreenHeight() / 2 - cpu.height / 2;
     cpu.speed = 6;
 
     while (WindowShouldClose() == false)
     {
+        // Toggle fullscreen/windowed mode when Escape is pressed
+        if (IsKeyPressed(KEY_ESCAPE))
+        {
+            ToggleFullscreen();
+            
+            // Reset positions when changing modes
+            ball.x = GetScreenWidth() / 2;
+            ball.y = GetScreenHeight() / 2;
+            player.x = GetScreenWidth() - player.width - 10;
+            player.y = GetScreenHeight() / 2 - player.height / 2;
+            cpu.y = GetScreenHeight() / 2 - cpu.height / 2;
+        }
+
         BeginDrawing();
 
         // Updating
@@ -153,13 +180,16 @@ int main()
         }
 
         // Drawing
-        ClearBackground(BLACK);
-        DrawLine(screen_width / 2, 0, screen_width / 2, screen_height, WHITE);
+        ClearBackground(Dark_Green);
+        DrawRectangle(GetScreenWidth()/2, 0, GetScreenWidth()/2, GetScreenWidth(), Green);
+        DrawCircle(GetScreenWidth()/2, GetScreenWidth()/3, 150, Light_Green);
+        DrawLine(GetScreenWidth() / 2, 0, GetScreenWidth() / 2, GetScreenHeight(), WHITE);
         ball.Draw();
         cpu.Draw();
         player.Draw();
-        DrawText(TextFormat("%i", cpu_score), screen_width/4 -20,20, 80,WHITE);
-        DrawText(TextFormat("%i", player_score), 3*screen_width/4 -20,20, 80,WHITE);
+        DrawText(TextFormat("%i", cpu_score), GetScreenWidth()/4 -20, 20, 70, WHITE);
+        DrawText(TextFormat("%i", player_score), 3*GetScreenWidth()/4 -20, 20, 70, WHITE);
+        DrawText(TextFormat("Speed: %i", player.speed), 3.25*GetScreenWidth()/4 -20, 20, 20, WHITE);
 
         EndDrawing();
     }
