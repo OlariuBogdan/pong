@@ -2,11 +2,12 @@
 #include <raylib.h>
 
 using namespace std;
-Color Green = Color{38,185,154,255};
-Color Dark_Green = Color{20,160,133,255};
-Color Light_Green = Color{129,204,184,255};
-Color Yellow = Color{243,213,91,255};
-
+Color Green = Color{38, 185, 154, 255};
+Color Dark_Green = Color{20, 160, 133, 255};
+Color Light_Green = Color{129, 204, 184, 255};
+Color Yellow = Color{243, 213, 91, 255};
+Sound sound;
+Sound sound2;
 
 int player_score = 0;
 int cpu_score = 0;
@@ -28,32 +29,33 @@ public:
         if (y + radius >= GetScreenHeight() || y - radius <= 0)
         {
             speed_y *= -1;
+            PlaySound(sound);
         }
-        if (x + radius >= GetScreenWidth()) //cpu castiga
+        if (x + radius >= GetScreenWidth()) // cpu castiga
         {
             cpu_score++;
+            PlaySound(sound2);
             ResetBall();
         }
 
-        if( x - radius <= 0)//player castiga
+        if (x - radius <= 0) // player castiga
         {
             player_score++;
+            PlaySound(sound2);
             ResetBall();
         }
-        
     }
     void ResetBall()
     {
-        x=GetScreenWidth()/2;
-        y=GetScreenHeight()/2;
-        int speed_choices[2]={-1,1};
-        speed_x *=speed_choices[GetRandomValue(0,1)];
-        speed_y *=speed_choices[GetRandomValue(0,1)];
+        x = GetScreenWidth() / 2;
+        y = GetScreenHeight() / 2;
+        int speed_choices[2] = {-1, 1};
+        speed_x *= speed_choices[GetRandomValue(0, 1)];
+        speed_y *= speed_choices[GetRandomValue(0, 1)];
     }
 };
 class Paddle
 {
-
 
 protected:
     void LimitMovment()
@@ -66,8 +68,8 @@ protected:
         {
             y = GetScreenHeight() - height;
         }
-
     }
+
 public:
     float x, y;
     float width, height;
@@ -87,18 +89,23 @@ public:
         {
             y = y + speed;
         }
-        if(IsKeyDown(KEY_LEFT)){
+        if (IsKeyDown(KEY_LEFT))
+        {
             speed--;
         }
-        if(IsKeyDown(KEY_RIGHT)){
+        if (IsKeyDown(KEY_RIGHT))
+        {
             speed++;
         }
-        if(IsKeyDown(KEY_A)){
-            height+=10;
+        if (IsKeyDown(KEY_A))
+        {
+            height += 10;
         }
-        if(IsKeyDown(KEY_S)){
-            height-=10;
+        if (IsKeyDown(KEY_S))
+        {
+            height -= 10;
         }
+
         LimitMovment();
     }
 };
@@ -127,10 +134,13 @@ int main()
 {
     const int initial_width = 1280;
     const int initial_height = 800;
-    
+
     // Start in fullscreen mode
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(initial_width, initial_height, "Retro Pong!");
+    InitAudioDevice();
+    sound = LoadSound("resure/04.wav");
+    sound2 = LoadSound("resure/02.wav");
     ToggleFullscreen();
     SetTargetFPS(60);
 
@@ -153,13 +163,15 @@ int main()
     cpu.y = GetScreenHeight() / 2 - cpu.height / 2;
     cpu.speed = 6;
 
+    // bool game_started = false;
+
     while (WindowShouldClose() == false)
     {
         // Toggle fullscreen/windowed mode when Escape is pressed
         if (IsKeyPressed(KEY_ESCAPE))
         {
             ToggleFullscreen();
-            
+
             // Reset positions when changing modes
             ball.x = GetScreenWidth() / 2;
             ball.y = GetScreenHeight() / 2;
@@ -174,32 +186,38 @@ int main()
         ball.Update();
         player.Update();
         cpu.Update(ball.y);
-        //verific coliziunea cu preretii
+        // verific coliziunea cu preretii
 
-        if(CheckCollisionCircleRec(Vector2{ball.x, ball.y},ball.radius,Rectangle{player.x, player.y, player.width, player.height}))
+        if (CheckCollisionCircleRec(Vector2{ball.x, ball.y}, ball.radius, Rectangle{player.x, player.y, player.width, player.height}))
         {
-            ball.speed_x *=-1;
+            ball.speed_x *= -1;
+            PlaySound(sound);
         }
-        if(CheckCollisionCircleRec(Vector2{ball.x, ball.y},ball.radius,Rectangle{cpu.x, cpu.y, cpu.width, cpu.height}))
+        if (CheckCollisionCircleRec(Vector2{ball.x, ball.y}, ball.radius, Rectangle{cpu.x, cpu.y, cpu.width, cpu.height}))
         {
-            ball.speed_x *=-1;
+            ball.speed_x *= -1;
+            PlaySound(sound);
         }
 
         // Drawing
         ClearBackground(Dark_Green);
-        DrawRectangle(GetScreenWidth()/2, 0, GetScreenWidth()/2, GetScreenWidth(), Green);
-        DrawCircle(GetScreenWidth()/2, GetScreenWidth()/3, 150, Light_Green);
+        DrawRectangle(GetScreenWidth() / 2, 0, GetScreenWidth() / 2, GetScreenWidth(), Green);
+        DrawCircle(GetScreenWidth() / 2, GetScreenWidth() / 3, 150, Light_Green);
         DrawLine(GetScreenWidth() / 2, 0, GetScreenWidth() / 2, GetScreenHeight(), WHITE);
         ball.Draw();
         cpu.Draw();
         player.Draw();
-        DrawText(TextFormat("%i", cpu_score), GetScreenWidth()/4 -20, 20, 70, WHITE);
-        DrawText(TextFormat("%i", player_score), 3*GetScreenWidth()/4 -20, 20, 70, WHITE);
-        DrawText(TextFormat("Speed: %i", player.speed), 3.25*GetScreenWidth()/4 -20, 20, 20, WHITE);
+
+        DrawText(TextFormat("%i", cpu_score), GetScreenWidth() / 4 - 20, 20, 70, WHITE);
+        DrawText(TextFormat("%i", player_score), 3 * GetScreenWidth() / 4 - 20, 20, 70, WHITE);
+        DrawText(TextFormat("Speed: %i", player.speed), 3.25 * GetScreenWidth() / 4 - 20, 20, 20, WHITE);
 
         EndDrawing();
     }
 
+    UnloadSound(sound);
+
+    CloseAudioDevice();
     CloseWindow();
 
     return 0;
