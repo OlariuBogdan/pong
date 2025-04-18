@@ -1,0 +1,177 @@
+
+#include "raylib.h"
+#include <vector>
+#include <string>
+#include <ctime>
+#include <cstdlib>
+
+const int screenWidth = 800;
+const int screenHeight = 450;
+
+struct Ball {
+    Vector2 position;
+    Vector2 speed;
+    float radius;
+    Color color;
+};
+
+struct Paddle {
+    Rectangle rect;
+    Color color;
+    int score;
+};
+
+struct PowerUp {
+    Rectangle rect;
+    Color color;
+    bool active;
+    float duration;
+    float timer;
+    int type; // 0 = speed up ball, 1 = enlarge paddle
+};
+float Clamp(float value, float min, float max) {
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
+}
+
+
+void DrawPowerUp(const PowerUp& p) {
+    if (p.active) DrawRectangleRec(p.rect, p.color);
+}
+
+void ApplyPowerUp(PowerUp& p, Ball& ball, Paddle& paddle) {
+    if (p.type == 0) {
+        ball.speed.x *= 1.5f;
+        ball.speed.y *= 1.5f;
+    } else if (p.type == 1) {
+        paddle.rect.height *= 1.5f;
+    }
+    p.timer = 0.0f;
+    p.active = false;
+}
+
+int main() {
+    InitWindow(screenWidth, screenHeight, "Advanced Pong");
+    InitAudioDevice();
+
+    Sound hitSound = LoadSound("hit.wav");
+    Sound scoreSound = LoadSound("score.wav");
+    Sound powerupSound = LoadSound("powerup.wav");
+
+    SetTargetFPS(60);
+
+    Ball ball = {{screenWidth / 2.0f, screenHeight / 2.0f}, {250.0f, 200.0f}, 10, RED};
+    Paddle leftPaddle = {{50, screenHeight / 2.0f - 60, 10, 120}, BLUE, 0};
+    Paddle rightPaddle = {{screenWidth - 60, screenHeight / 2.0f - 60, 10, 120}, GREEN, 0};
+
+    std::vector<PowerUp> powerUps;
+    float spawnTimer = 0;
+
+    while (!WindowShouldClose()) {
+        float delta = GetFrameTime();
+
+        // Input
+        if (IsKeyDown(KEY_W)) leftPaddle.rect.y -= 300 * delta;
+        if (IsKeyDown(KEY_S)) leftPaddle.rect.y += 300 * delta;
+        if (IsKeyDown(KEY_UP)) rightPaddle.rect.y -= 300 * delta;
+        if (IsKeyDown(KEY_DOWN)) rightPaddle.rect.y += 300 * delta;
+
+        // Keep paddles on screen
+        leftPaddle.rect.y = Clamp(leftPaddle.rect.y, 0, screenHeight - leftPaddle.rect.height);
+        rightPaddle.rect.y = Clamp(rightPaddle.rect.y, 0, screenHeight - rightPaddle.rect.height);
+
+        // Ball movement
+        ball.position.x += ball.speed.x * delta;
+        ball.position.y += ball.speed.y * delta;
+
+        // Bounce off top and bottom
+        if (ball.position.y < ball.radius || ball.position.y > screenHeight - ball.radius) {
+            ball.speed.y *= -1;
+        }
+
+        // Ball and paddle collision
+        if (CheckCollisionCircleRec(ball.position, ball.radius, leftPaddle.rect)) {
+            ball.speed.x *= -1.1f;
+            ball.position.x = leftPaddle.rect.x + leftPaddle.rect.width + ball.radius;
+            PlaySound(hitSound);
+        }
+        if (CheckCollisionCircleRec(ball.position, ball.radius, rightPaddle.rect)) {
+            ball.speed.x *= -1.1f;
+            ball.position.x = rightPaddle.rect.x - ball.radius;
+            PlaySound(hitSound);
+        }
+
+        // Score
+        if (ball.position.x < 0) {
+            rightPaddle.score++;
+            PlaySound(scoreSound);
+            ball.position = {screenWidth / 2.0f, screenHeight / 2.0f};
+            ball.speed = {250.0f, 200.0f};
+        }
+        if (ball.position.x > screenWidth) {
+            leftPaddle.score++;
+            PlaySound(scoreSound);
+            ball.position = {screenWidth / 2.0f, screenHeight / 2.0f};
+            ball.speed = {-250.0f, -200.0f};
+        }
+
+        // Power-up spawn
+        spawnTimer += delta;
+        if (spawnTimer >= 5.0f) {
+            PowerUp p;
+            p.rect = {GetRandomValue(200, screenWidth - 200), GetRandomValue(50, screenHeight - 50), 20, 20};
+            p.color = YELLOW;
+            p.active = true;
+            p.duration = 5.0f;
+            p.timer = 0.0f;
+            p.type = GetRandomValue(0, 1);
+            powerUps.push_back(p);
+            spawnTimer = 0;
+        }
+
+        // Power-up collision
+        for (auto& p : powerUps) {
+            if (p.active && CheckCollisionCircleRec(ball.position, ball.radius, p.rect)) {
+                ApplyPowerUp(p, ball, ball.position.x < screenWidth / 2 ? leftPaddle : rightPaddle);
+                PlaySound(powerupSound);
+            }
+        }
+
+        // Update timers
+        for (auto& p : powerUps) {
+            if (!p.active) {
+                p.timer += delta;
+                if (p.timer >= p.duration) {
+                    if (p.type == 1) {
+                        leftPaddle.rect.height = 120;
+                        rightPaddle.rect.height = 120;
+                    }
+                }
+            }
+        }
+
+        // Draw
+        BeginDrawing();
+        ClearBackground(BLACK);
+
+        DrawCircleV(ball.position, ball.radius, ball.color);
+        DrawRectangleRec(leftPaddle.rect, leftPaddle.color);
+        DrawRectangleRec(rightPaddle.rect, rightPaddle.color);
+
+        for (auto& p : powerUps) DrawPowerUp(p);
+
+        DrawText(TextFormat("P1: %d", leftPaddle.score), 10, 10, 20, WHITE);
+        DrawText(TextFormat("P2: %d", rightPaddle.score), screenWidth - 80, 10, 20, WHITE);
+
+        EndDrawing();
+    }
+
+    UnloadSound(hitSound);
+    UnloadSound(scoreSound);
+    UnloadSound(powerupSound);
+    CloseAudioDevice();
+    CloseWindow();
+
+    return 0;
+}

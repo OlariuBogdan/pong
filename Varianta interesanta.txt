@@ -1,0 +1,178 @@
+// Pong Game Fullscreen + AI + Powerups + Scoring
+#include "raylib.h"
+#include <vector>
+#include <cmath>
+#include <ctime>
+#include <fstream>
+#include <string>
+#include <algorithm>
+
+#define SCREEN_WIDTH 1280
+#define SCREEN_HEIGHT 720
+
+struct Ball {
+    float x, y;
+    float speedX, speedY;
+    float radius;
+};
+
+struct Paddle {
+    float x, y;
+    float width, height;
+    float speed;
+};
+
+struct Particle {
+    Vector2 position;
+    Color color;
+    float alpha;
+};
+
+struct PowerUp {
+    float x, y;
+    float radius;
+    bool active;
+};
+
+void DrawParticles(std::vector<Particle>& particles) {
+    for (auto& p : particles) {
+        DrawCircleV(p.position, 2, Fade(p.color, p.alpha));
+        p.alpha -= 0.01f;
+    }
+    particles.erase(std::remove_if(particles.begin(), particles.end(), [](Particle& p){ return p.alpha <= 0; }), particles.end());
+}
+
+void SaveScore(int playerScore, int cpuScore) {
+    std::ofstream file("scores.txt", std::ios::app);
+    if (file.is_open()) {
+        file << "Player: " << playerScore << " - CPU: " << cpuScore << "\n";
+        file.close();
+    }
+}
+
+int main() {
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Pong AI Full Game");
+    ToggleFullscreen();
+    InitAudioDevice();
+
+    SetTargetFPS(60);
+
+    Ball ball = { (float)SCREEN_WIDTH / 2, (float)SCREEN_HEIGHT / 2, 7, 7, 10 };
+    Paddle player = { 50, (float)SCREEN_HEIGHT / 2 - 60, 20, 120, 7 };
+    Paddle cpu = { (float)SCREEN_WIDTH - 70, (float)SCREEN_HEIGHT / 2 - 60, 20, 120, 6 };
+
+    PowerUp powerUp = { SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f, 12, true };
+    bool powerUpActive = false;
+    float powerUpTimer = 0;
+
+    std::vector<Particle> particles;
+
+    int playerScore = 0, cpuScore = 0;
+    bool paused = false, gameStarted = false, gameOver = false;
+
+    enum Difficulty { EASY, MEDIUM, HARD };
+    Difficulty difficulty = MEDIUM;
+
+    while (!WindowShouldClose()) {
+        if (!gameStarted) {
+            if (IsKeyPressed(KEY_ENTER)) gameStarted = true;
+            if (IsKeyPressed(KEY_E)) difficulty = EASY;
+            if (IsKeyPressed(KEY_M)) difficulty = MEDIUM;
+            if (IsKeyPressed(KEY_H)) difficulty = HARD;
+
+            BeginDrawing();
+            ClearBackground(BLACK);
+            DrawText("Press ENTER to Start", SCREEN_WIDTH / 2 - 150, SCREEN_HEIGHT / 2 - 40, 30, WHITE);
+            DrawText("E - Easy | M - Medium | H - Hard", SCREEN_WIDTH / 2 - 180, SCREEN_HEIGHT / 2 + 10, 20, GRAY);
+            EndDrawing();
+            continue;
+        }
+
+        if (paused) {
+            if (IsKeyPressed(KEY_P)) paused = false;
+            if (IsKeyPressed(KEY_R)) {
+                ball = { (float)SCREEN_WIDTH / 2, (float)SCREEN_HEIGHT / 2, 7, 7, 10 };
+                playerScore = cpuScore = 0;
+                gameOver = false;
+                paused = false;
+            }
+            if (IsKeyPressed(KEY_ESCAPE)) break;
+            BeginDrawing();
+            ClearBackground(BLACK);
+            DrawText("Paused", SCREEN_WIDTH / 2 - 50, SCREEN_HEIGHT / 2 - 40, 40, WHITE);
+            DrawText("Press P to Resume", SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2 + 10, 20, GRAY);
+            DrawText("R - Restart | ESC - Quit", SCREEN_WIDTH / 2 - 110, SCREEN_HEIGHT / 2 + 40, 20, GRAY);
+            EndDrawing();
+            continue;
+        }
+
+        if (IsKeyPressed(KEY_P)) paused = true;
+
+        if (!gameOver) {
+            if (IsKeyDown(KEY_W)) player.y -= player.speed;
+            if (IsKeyDown(KEY_S)) player.y += player.speed;
+
+            // CPU difficulty
+            float aiSpeed = (difficulty == EASY) ? 3 : (difficulty == MEDIUM ? 5 : 7);
+            if (ball.y > cpu.y + cpu.height / 2) cpu.y += aiSpeed;
+            else cpu.y -= aiSpeed;
+
+            // Ball update
+            ball.x += ball.speedX;
+            ball.y += ball.speedY;
+
+            if (ball.y < 0 || ball.y > SCREEN_HEIGHT) ball.speedY *= -1;
+
+            // Collision with paddles
+            if (CheckCollisionCircleRec({ ball.x, ball.y }, ball.radius, { player.x, player.y, player.width, player.height })) ball.speedX *= -1;
+            if (CheckCollisionCircleRec({ ball.x, ball.y }, ball.radius, { cpu.x, cpu.y, cpu.width, cpu.height })) ball.speedX *= -1;
+
+            // Scoring
+            if (ball.x < 0) { cpuScore++; ball.x = SCREEN_WIDTH / 2; ball.y = SCREEN_HEIGHT / 2; ball.speedX *= -1; }
+            if (ball.x > SCREEN_WIDTH) { playerScore++; ball.x = SCREEN_WIDTH / 2; ball.y = SCREEN_HEIGHT / 2; ball.speedX *= -1; }
+
+            // Particles
+            if (fabs(ball.speedX) > 6) {
+                particles.push_back({ {ball.x, ball.y}, YELLOW, 1.0f });
+            }
+
+            // Power-up
+            if (powerUp.active && CheckCollisionCircleRec({ ball.x, ball.y }, ball.radius, { powerUp.x - powerUp.radius, powerUp.y - powerUp.radius, powerUp.radius * 2, powerUp.radius * 2 })) {
+                player.height = 180;
+                powerUp.active = false;
+                powerUpTimer = GetTime();
+            }
+            if (!powerUp.active && GetTime() - powerUpTimer > 8.0f) {
+                powerUp = { GetRandomValue(200, SCREEN_WIDTH - 200), GetRandomValue(100, SCREEN_HEIGHT - 100), 12, true };
+                player.height = 120;
+            }
+
+            if (playerScore >= 5 || cpuScore >= 5) {
+                SaveScore(playerScore, cpuScore);
+                gameOver = true;
+            }
+        }
+
+        BeginDrawing();
+        ClearBackground(BLACK);
+        DrawRectangleRec({ player.x, player.y, player.width, player.height }, WHITE);
+        DrawRectangleRec({ cpu.x, cpu.y, cpu.width, cpu.height }, WHITE);
+        DrawCircle(ball.x, ball.y, ball.radius, RED);
+
+        if (powerUp.active) DrawCircle(powerUp.x, powerUp.y, powerUp.radius, BLUE);
+
+        DrawText(TextFormat("%d", playerScore), SCREEN_WIDTH / 4, 20, 40, WHITE);
+        DrawText(TextFormat("%d", cpuScore), SCREEN_WIDTH * 3 / 4, 20, 40, WHITE);
+
+        if (gameOver) {
+            DrawText("Game Over! Press R to Restart or ESC to Quit", SCREEN_WIDTH / 2 - 250, SCREEN_HEIGHT / 2, 20, WHITE);
+        }
+
+        DrawParticles(particles);
+        EndDrawing();
+    }
+
+    CloseAudioDevice();
+    CloseWindow();
+    return 0;
+}

@@ -1,224 +1,213 @@
-#include <iostream>
-#include <raylib.h>
+#include "raylib.h"
+#include <vector>
+#include <cmath>
+#include <ctime>
+#include <fstream>
+#include <string>
+#include <algorithm>
 
-using namespace std;
-Color Green = Color{38, 185, 154, 255};
-Color Dark_Green = Color{20, 160, 133, 255};
-Color Light_Green = Color{129, 204, 184, 255};
-Color Yellow = Color{243, 213, 91, 255};
-Sound sound;
-Sound sound2;
+#define SCREEN_WIDTH 1280
+#define SCREEN_HEIGHT 720
 
-int player_score = 0;
-int cpu_score = 0;
-class Ball
-{
-public:
+struct Ball {
     float x, y;
-    int speed_x, speed_y;
-    int radius;
-
-    void Draw()
-    {
-        DrawCircle(x, y, radius, Yellow);
-    }
-    void Update()
-    {
-        x += speed_x;
-        y += speed_y;
-        if (y + radius >= GetScreenHeight() || y - radius <= 0)
-        {
-            speed_y *= -1;
-            PlaySound(sound);
-        }
-        if (x + radius >= GetScreenWidth()) // cpu castiga
-        {
-            cpu_score++;
-            PlaySound(sound2);
-            ResetBall();
-        }
-
-        if (x - radius <= 0) // player castiga
-        {
-            player_score++;
-            PlaySound(sound2);
-            ResetBall();
-        }
-    }
-    void ResetBall()
-    {
-        x = GetScreenWidth() / 2;
-        y = GetScreenHeight() / 2;
-        int speed_choices[2] = {-1, 1};
-        speed_x *= speed_choices[GetRandomValue(0, 1)];
-        speed_y *= speed_choices[GetRandomValue(0, 1)];
-    }
+    float speedX, speedY;
+    float radius;
 };
-class Paddle
-{
 
-protected:
-    void LimitMovment()
-    {
-        if (y <= 0)
-        {
-            y = 0;
-        }
-        if (y + height >= GetScreenHeight())
-        {
-            y = GetScreenHeight() - height;
-        }
-    }
-
-public:
+struct Paddle {
     float x, y;
     float width, height;
-    int speed;
-
-    void Draw()
-    {
-        DrawRectangle(x, y, width, height, WHITE);
-    }
-    void Update()
-    {
-        if (IsKeyDown(KEY_UP))
-        {
-            y = y - speed;
-        }
-        if (IsKeyDown(KEY_DOWN))
-        {
-            y = y + speed;
-        }
-        if (IsKeyDown(KEY_LEFT))
-        {
-            speed--;
-        }
-        if (IsKeyDown(KEY_RIGHT))
-        {
-            speed++;
-        }
-        if (IsKeyDown(KEY_A))
-        {
-            height += 10;
-        }
-        if (IsKeyDown(KEY_S))
-        {
-            height -= 10;
-        }
-
-        LimitMovment();
-    }
+    float speed;
 };
 
-class CpuPaddle : public Paddle
-{
-public:
-    void Update(int ball_y)
-    {
-        if (y + height / 2 > ball_y)
-        {
-            y = y - speed;
-        }
-        if (y + height / 2 <= ball_y)
-        {
-            y = y + speed;
-        }
-        LimitMovment();
-    }
+struct Particle {
+    Vector2 position;
+    Color color;
+    float alpha;
 };
-Ball ball;
-Paddle player;
-CpuPaddle cpu;
 
-int main()
-{
-    const int initial_width = 1280;
-    const int initial_height = 800;
+struct PowerUp {
+    float x, y;
+    float radius;
+    bool active;
+};
 
-    // Start in fullscreen mode
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(initial_width, initial_height, "Retro Pong!");
-    InitAudioDevice();
-    sound = LoadSound("resure/04.wav");
-    sound2 = LoadSound("resure/02.wav");
+void DrawParticles(std::vector<Particle>& particles) {
+    for (auto& p : particles) {
+        DrawCircleV(p.position, 2, Fade(p.color, p.alpha));
+        p.alpha -= 0.01f;
+    }
+    particles.erase(std::remove_if(particles.begin(), particles.end(), [](Particle& p){ return p.alpha <= 0; }), particles.end());
+}
+
+void SaveScore(int player1Score, int player2Score, bool vsCPU) {
+    std::ofstream file("scores.txt", std::ios::app);
+    if (file.is_open()) {
+        if (vsCPU)
+            file << "Player: " << player1Score << " - CPU: " << player2Score << "\n";
+        else
+            file << "Player 1: " << player1Score << " - Player 2: " << player2Score << "\n";
+        file.close();
+    }
+}
+
+int main() {
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Pong Full Game with Sound");
     ToggleFullscreen();
+    InitAudioDevice();
     SetTargetFPS(60);
 
-    // Initialize game objects with relative positions
-    ball.radius = 20;
-    ball.x = GetScreenWidth() / 2;
-    ball.y = GetScreenHeight() / 2;
-    ball.speed_x = 7;
-    ball.speed_y = 7;
+    // SUNETE
+    Sound sPaddleHit = LoadSound("resure/04.wav");
+    Sound sScore = LoadSound("resure/02.wav");
+    Sound sPowerUp = LoadSound("resure/powerup.wav");
+    Sound sPowerUpSpawn = LoadSound("resure/powerup.wav");
+    Sound sGameOver = LoadSound("gameover.wav");
 
-    player.width = 25;
-    player.height = 120;
-    player.x = GetScreenWidth() - player.width - 10;
-    player.y = GetScreenHeight() / 2 - player.height / 2;
-    player.speed = 6;
+    Ball ball = { SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f, 7, 7, 10 };
+    Paddle player1 = { 50, SCREEN_HEIGHT / 2.0f - 60, 20, 120, 7 };
+    Paddle player2 = { SCREEN_WIDTH - 70, SCREEN_HEIGHT / 2.0f - 60, 20, 120, 6 };
 
-    cpu.height = 120;
-    cpu.width = 25;
-    cpu.x = 10;
-    cpu.y = GetScreenHeight() / 2 - cpu.height / 2;
-    cpu.speed = 6;
+    PowerUp powerUp = { SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f, 12, true };
+    float powerUpTimer = 0;
+    bool powerUpActive = false;
 
-    // bool game_started = false;
+    std::vector<Particle> particles;
 
-    while (WindowShouldClose() == false)
-    {
-        // Toggle fullscreen/windowed mode when Escape is pressed
-        if (IsKeyPressed(KEY_ESCAPE))
-        {
-            ToggleFullscreen();
+    int player1Score = 0, player2Score = 0;
+    bool paused = false, gameStarted = false, gameOver = false;
+    bool vsCPU = true;
 
-            // Reset positions when changing modes
-            ball.x = GetScreenWidth() / 2;
-            ball.y = GetScreenHeight() / 2;
-            player.x = GetScreenWidth() - player.width - 10;
-            player.y = GetScreenHeight() / 2 - player.height / 2;
-            cpu.y = GetScreenHeight() / 2 - cpu.height / 2;
+    enum Difficulty { EASY, MEDIUM, HARD };
+    Difficulty difficulty = MEDIUM;
+
+    while (!WindowShouldClose()) {
+        if (!gameStarted) {
+            if (IsKeyPressed(KEY_ENTER)) gameStarted = true;
+            if (IsKeyPressed(KEY_ONE)) vsCPU = false;
+            if (IsKeyPressed(KEY_TWO)) vsCPU = true;
+            if (IsKeyPressed(KEY_E)) difficulty = EASY;
+            if (IsKeyPressed(KEY_M)) difficulty = MEDIUM;
+            if (IsKeyPressed(KEY_H)) difficulty = HARD;
+
+            BeginDrawing();
+            ClearBackground(BLACK);
+            DrawText("PONG GAME", SCREEN_WIDTH / 2 - 100, 100, 40, WHITE);
+            DrawText("Press 1 for Player vs Player", SCREEN_WIDTH / 2 - 150, 200, 20, GRAY);
+            DrawText("Press 2 for Player vs CPU", SCREEN_WIDTH / 2 - 150, 230, 20, GRAY);
+            DrawText("E - Easy | M - Medium | H - Hard", SCREEN_WIDTH / 2 - 160, 300, 20, GRAY);
+            DrawText("Press ENTER to Start", SCREEN_WIDTH / 2 - 150, 400, 30, WHITE);
+            EndDrawing();
+            continue;
+        }
+
+        if (paused) {
+            if (IsKeyPressed(KEY_P)) paused = false;
+            if (IsKeyPressed(KEY_R)) {
+                ball = { SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f, 7, 7, 10 };
+                player1Score = player2Score = 0;
+                gameOver = false;
+                paused = false;
+            }
+            if (IsKeyPressed(KEY_ESCAPE)) break;
+            BeginDrawing();
+            ClearBackground(BLACK);
+            DrawText("Paused", SCREEN_WIDTH / 2 - 50, SCREEN_HEIGHT / 2 - 40, 40, WHITE);
+            DrawText("Press P to Resume", SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2 + 10, 20, GRAY);
+            DrawText("R - Restart | ESC - Quit", SCREEN_WIDTH / 2 - 110, SCREEN_HEIGHT / 2 + 40, 20, GRAY);
+            EndDrawing();
+            continue;
+        }
+
+        if (IsKeyPressed(KEY_P)) paused = true;
+
+        if (!gameOver) {
+            if (IsKeyDown(KEY_W)) player1.y -= player1.speed;
+            if (IsKeyDown(KEY_S)) player1.y += player1.speed;
+
+            if (vsCPU) {
+                float aiSpeed = (difficulty == EASY) ? 3 : (difficulty == MEDIUM ? 5 : 7);
+                if (ball.y > player2.y + player2.height / 2) player2.y += aiSpeed;
+                else player2.y -= aiSpeed;
+            } else {
+                if (IsKeyDown(KEY_UP)) player2.y -= player2.speed;
+                if (IsKeyDown(KEY_DOWN)) player2.y += player2.speed;
+            }
+
+            ball.x += ball.speedX;
+            ball.y += ball.speedY;
+
+            if (ball.y < 0 || ball.y > SCREEN_HEIGHT) ball.speedY *= -1;
+
+            if (CheckCollisionCircleRec({ ball.x, ball.y }, ball.radius, { player1.x, player1.y, player1.width, player1.height })) {
+                ball.speedX *= -1;
+                PlaySound(sPaddleHit);
+            }
+
+            if (CheckCollisionCircleRec({ ball.x, ball.y }, ball.radius, { player2.x, player2.y, player2.width, player2.height })) {
+                ball.speedX *= -1;
+                PlaySound(sPaddleHit);
+            }
+
+            if (ball.x < 0) {
+                player2Score++;
+                ball = { SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f, -7, 7, 10 };
+                PlaySound(sScore);
+            }
+
+            if (ball.x > SCREEN_WIDTH) {
+                player1Score++;
+                ball = { SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f, 7, 7, 10 };
+                PlaySound(sScore);
+            }
+
+            if (fabs(ball.speedX) > 6)
+                particles.push_back({ {ball.x, ball.y}, YELLOW, 1.0f });
+
+            if (powerUp.active && CheckCollisionCircleRec({ ball.x, ball.y }, ball.radius, { powerUp.x - powerUp.radius, powerUp.y - powerUp.radius, powerUp.radius * 2, powerUp.radius * 2 })) {
+                player1.height = 180;
+                powerUp.active = false;
+                powerUpTimer = GetTime();
+                PlaySound(sPowerUp);
+            }
+
+            if (!powerUp.active && GetTime() - powerUpTimer > 8.0f) {
+                powerUp = { GetRandomValue(200, SCREEN_WIDTH - 200), GetRandomValue(100, SCREEN_HEIGHT - 100), 12, true };
+                player1.height = 120;
+                PlaySound(sPowerUpSpawn);
+            }
+
+            if (player1Score >= 5 || player2Score >= 5) {
+                SaveScore(player1Score, player2Score, vsCPU);
+                gameOver = true;
+                PlaySound(sGameOver);
+            }
         }
 
         BeginDrawing();
+        ClearBackground(BLACK);
+        DrawRectangleRec({ player1.x, player1.y, player1.width, player1.height }, WHITE);
+        DrawRectangleRec({ player2.x, player2.y, player2.width, player2.height }, WHITE);
+        DrawCircle(ball.x, ball.y, ball.radius, RED);
+        if (powerUp.active) DrawCircle(powerUp.x, powerUp.y, powerUp.radius, BLUE);
+        DrawText(TextFormat("%d", player1Score), SCREEN_WIDTH / 4, 20, 40, WHITE);
+        DrawText(TextFormat("%d", player2Score), SCREEN_WIDTH * 3 / 4, 20, 40, WHITE);
 
-        // Updating
-        ball.Update();
-        player.Update();
-        cpu.Update(ball.y);
-        // verific coliziunea cu preretii
+        if (gameOver)
+            DrawText("Game Over! Press R to Restart or ESC to Quit", SCREEN_WIDTH / 2 - 250, SCREEN_HEIGHT / 2, 20, WHITE);
 
-        if (CheckCollisionCircleRec(Vector2{ball.x, ball.y}, ball.radius, Rectangle{player.x, player.y, player.width, player.height}))
-        {
-            ball.speed_x *= -1;
-            PlaySound(sound);
-        }
-        if (CheckCollisionCircleRec(Vector2{ball.x, ball.y}, ball.radius, Rectangle{cpu.x, cpu.y, cpu.width, cpu.height}))
-        {
-            ball.speed_x *= -1;
-            PlaySound(sound);
-        }
-
-        // Drawing
-        ClearBackground(Dark_Green);
-        DrawRectangle(GetScreenWidth() / 2, 0, GetScreenWidth() / 2, GetScreenWidth(), Green);
-        DrawCircle(GetScreenWidth() / 2, GetScreenWidth() / 3, 150, Light_Green);
-        DrawLine(GetScreenWidth() / 2, 0, GetScreenWidth() / 2, GetScreenHeight(), WHITE);
-        ball.Draw();
-        cpu.Draw();
-        player.Draw();
-
-        DrawText(TextFormat("%i", cpu_score), GetScreenWidth() / 4 - 20, 20, 70, WHITE);
-        DrawText(TextFormat("%i", player_score), 3 * GetScreenWidth() / 4 - 20, 20, 70, WHITE);
-        DrawText(TextFormat("Speed: %i", player.speed), 3.25 * GetScreenWidth() / 4 - 20, 20, 20, WHITE);
-
+        DrawParticles(particles);
         EndDrawing();
     }
 
-    UnloadSound(sound);
-
+    // Clean up
+    UnloadSound(sPaddleHit);
+    UnloadSound(sScore);
+    UnloadSound(sPowerUp);
+    UnloadSound(sPowerUpSpawn);
+    UnloadSound(sGameOver);
     CloseAudioDevice();
     CloseWindow();
-
     return 0;
 }
