@@ -52,18 +52,43 @@ void SaveScore(int player1Score, int player2Score, bool vsCPU) {
     }
 }
 
+void ResetGame(Ball& ball, Paddle& player1, Paddle& player2, int& player1Score, int& player2Score, bool& gameOver, bool& paused) {
+    ball = { SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f, 7, 7, 10 };
+    player1 = { 50, SCREEN_HEIGHT / 2.0f - 60, 20, 120, 7 };
+    player2 = { SCREEN_WIDTH - 70, SCREEN_HEIGHT / 2.0f - 60, 20, 120, 6 };
+    player1Score = player2Score = 0;
+    gameOver = false;
+    paused = false;
+}
+
 int main() {
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Pong Full Game with Sound");
     ToggleFullscreen();
     InitAudioDevice();
     SetTargetFPS(60);
+    HideCursor();
+    srand(time(0));
 
-    // SUNETE
     Sound sPaddleHit = LoadSound("resure/04.wav");
     Sound sScore = LoadSound("resure/02.wav");
     Sound sPowerUp = LoadSound("resure/powerup.wav");
     Sound sPowerUpSpawn = LoadSound("resure/powerup.wav");
-    Sound sGameOver = LoadSound("gameover.wav");
+
+    std::vector<Sound> gameOverSounds = {
+        LoadSound("resure/1-000-000-000-iq.mp3"),
+        LoadSound("resure/am-pofta-de-baut.mp3"),
+        LoadSound("resure/ataca-un-hacker.mp3"),
+        LoadSound("resure/bai-muie.mp3"),
+        LoadSound("resure/date-ca-ma-cac.mp3"),
+        LoadSound("resure/gagicar-ca-asa-vreau-eu.mp3"),
+        LoadSound("resure/hai-mai-repede.mp3"),
+        LoadSound("resure/ia-zi-bit-mergem-sa-manancam.mp3"),
+        LoadSound("resure/ilie-nervosu-fdumnezei.mp3"),
+        LoadSound("resure/intra-n-apa-marii-earrape.mp3"),
+        LoadSound("resure/omni-man-are-you-sure.mp3"),
+        LoadSound("resure/pumnu-meu-beton-armat.mp3"),
+        LoadSound("resure/scandura-te-chema-ma-ta.mp3")
+    };
 
     Ball ball = { SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f, 7, 7, 10 };
     Paddle player1 = { 50, SCREEN_HEIGHT / 2.0f - 60, 20, 120, 7 };
@@ -105,10 +130,7 @@ int main() {
         if (paused) {
             if (IsKeyPressed(KEY_P)) paused = false;
             if (IsKeyPressed(KEY_R)) {
-                ball = { SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f, 7, 7, 10 };
-                player1Score = player2Score = 0;
-                gameOver = false;
-                paused = false;
+                ResetGame(ball, player1, player2, player1Score, player2Score, gameOver, paused);
             }
             if (IsKeyPressed(KEY_ESCAPE)) break;
             BeginDrawing();
@@ -181,7 +203,12 @@ int main() {
             if (player1Score >= 5 || player2Score >= 5) {
                 SaveScore(player1Score, player2Score, vsCPU);
                 gameOver = true;
-                PlaySound(sGameOver);
+                int randomIndex = GetRandomValue(0, gameOverSounds.size() - 1);
+                PlaySound(gameOverSounds[randomIndex]);
+            }
+        } else {
+            if (IsKeyPressed(KEY_R)) {
+                ResetGame(ball, player1, player2, player1Score, player2Score, gameOver, paused);
             }
         }
 
@@ -191,22 +218,23 @@ int main() {
         DrawRectangleRec({ player2.x, player2.y, player2.width, player2.height }, WHITE);
         DrawCircle(ball.x, ball.y, ball.radius, RED);
         if (powerUp.active) DrawCircle(powerUp.x, powerUp.y, powerUp.radius, BLUE);
+        DrawParticles(particles);
         DrawText(TextFormat("%d", player1Score), SCREEN_WIDTH / 4, 20, 40, WHITE);
         DrawText(TextFormat("%d", player2Score), SCREEN_WIDTH * 3 / 4, 20, 40, WHITE);
-
-        if (gameOver)
-            DrawText("Game Over! Press R to Restart or ESC to Quit", SCREEN_WIDTH / 2 - 250, SCREEN_HEIGHT / 2, 20, WHITE);
-
-        DrawParticles(particles);
+        if (gameOver) {
+            DrawText("Game Over", SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2 - 30, 40, RED);
+            DrawText("Press R to Restart | ESC to Quit", SCREEN_WIDTH / 2 - 150, SCREEN_HEIGHT / 2 + 20, 20, WHITE);
+        }
         EndDrawing();
     }
 
-    // Clean up
+    for (auto& sound : gameOverSounds) {
+        UnloadSound(sound);
+    }
     UnloadSound(sPaddleHit);
     UnloadSound(sScore);
     UnloadSound(sPowerUp);
     UnloadSound(sPowerUpSpawn);
-    UnloadSound(sGameOver);
     CloseAudioDevice();
     CloseWindow();
     return 0;
